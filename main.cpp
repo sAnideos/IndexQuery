@@ -92,7 +92,7 @@ void readFile(char *filename, int tn) {
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
 	// do sth with number of docs
-        
+        cout << "Testing Git!" << endl;
 
         int thread_counter = 0; // in which thread the string goes
 	// read first sentence from txt
