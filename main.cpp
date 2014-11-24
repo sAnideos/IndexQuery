@@ -38,21 +38,59 @@ class Element {
 
 typedef struct list {
     
-    int doc; // first element will be the number of docs plz
+    int docID; // first element will be the number of docs plz
     struct list *next; // the next document
 
 }list;
 
-unordered_map <string, list*> InvertedIndex;
+
+class Thing {
+    
+    public:
+        
+        int crowd;
+        list *firstNode;
+        list *head = new list;
+        
+        Thing() {
+            crowd = 1;
+            //head = NULL;
+            firstNode = head;
+        }
+        
+        void incrementCrowd() {
+            crowd++;
+        }
+    
+};
 
 
-void addToList(list *old_node, int num){
+unordered_map <string, Thing> InvertedIndex;
+
+
+list *addToList(list *old_node, int num){
 
     list *element = new list;
     element->next = NULL;
-    element->doc = num;
+    element->docID = num;
+    //cout << "test" << endl;
     old_node->next = element;
+    
+    
+    
+    return element;
 
+}
+
+
+void printList(list *head) {
+    
+    list *node = head;
+    while (node->next != NULL) {
+        cout << node->next->docID << "  ";
+        node = node->next;
+    }
+    cout << endl;
 }
 
 
@@ -61,6 +99,15 @@ void invertedIndex() {
 
 }
 
+void printMap() {
+    
+    for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) {
+        cout << it->first << " " << it->second.crowd << " : ";
+        printList(it->second.firstNode);
+    }
+    cout << endl;
+    
+}
 
 
 //This function will be called from a thread
@@ -75,7 +122,24 @@ void *call_from_thread(void *a) {
     while(iss >> word)
     {
 
-        cout << word << endl;
+        //cout << word << endl;
+        
+        if (InvertedIndex.find(word) != InvertedIndex.end()) {
+            
+            InvertedIndex[word].incrementCrowd();
+            InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
+            
+        }
+        else {
+            
+            Thing thing;
+            InvertedIndex[word] = thing;
+            
+            // add first docID
+            InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
+            
+            //cout << "else" << endl;
+        }
 
     }
     return NULL;
@@ -92,7 +156,6 @@ void readFile(char *filename, int tn) {
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
 	// do sth with number of docs
-        cout << "Testing Git!" << endl;
 
         int thread_counter = 0; // in which thread the string goes
 	// read first sentence from txt
@@ -132,35 +195,13 @@ void readFile(char *filename, int tn) {
 
 int main() {
     
-
-    long a = 10;
+    int threads_num  = 3;
     
-    int threads_num  = 5;
+    readFile("Data.txt", threads_num);
 
-    unordered_map <string, list*> m;
-    list *el = new list;
-    el->doc = 1;
-    el->next=NULL;
-
-
-    /*
-    list *el2 = new list;
-    el2->doc = 250;
-    el2->next = NULL;
-    el->next = el2;
-    */
-    addToList(el, 250);
-    m["test"] = el;
-    cout << m["test"]->next->doc << endl;
-    
-
-
-    
+    printMap();
 
     cout << "Man with boobssssss" << endl;
-
-
-
 
     return 0;
 }
