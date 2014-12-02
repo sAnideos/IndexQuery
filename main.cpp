@@ -13,10 +13,12 @@
 #include <string>
 #include <stdlib.h>
 #include <unordered_map>
+#include <tgmath.h>
 
 using namespace std;
 
 static const int num_threads = 2;
+int documentsNumber = 7;
 
 
 class Element {
@@ -51,11 +53,18 @@ class Thing {
         int crowd;
         list *firstNode;
         list *head = new list;
-        
+        float *vectorArray;
+
+
         Thing() {
             crowd = 1;
             //head = NULL;
             firstNode = head;
+            vectorArray = new float[documentsNumber];
+            for(int i = 0; i < documentsNumber; i++)
+            {
+                vectorArray[i] = 0.0;
+            }
         }
         
         void incrementCrowd() {
@@ -65,8 +74,7 @@ class Thing {
 };
 
 
-unordered_map <string, Thing> InvertedIndex;
-
+unordered_map <string, Thing> InvertedIndex; // the Inverted Index
 
 list *addToList(list *old_node, int num){
 
@@ -109,6 +117,26 @@ void printMap() {
     
 }
 
+//prints something
+void printList(){
+
+        
+        for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
+        {
+            
+            cout << it->first << " ";
+            cout << "     ";
+            for(int i = 0; i < documentsNumber; i++)
+            {
+                cout << it->second.vectorArray[i] << " ";
+            }
+            cout << endl;
+        }
+        cout << endl;
+        
+
+}
+
 
 //This function will be called from a thread
 void *call_from_thread(void *a) {
@@ -118,6 +146,7 @@ void *call_from_thread(void *a) {
     istringstream iss(argz->doc);
     string word;
 
+    
 
     while(iss >> word)
     {
@@ -128,6 +157,7 @@ void *call_from_thread(void *a) {
             
             InvertedIndex[word].incrementCrowd();
             InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
+            InvertedIndex[word].vectorArray[argz->id - 1] = 1.0;
             
         }
         else {
@@ -137,6 +167,7 @@ void *call_from_thread(void *a) {
             
             // add first docID
             InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
+            InvertedIndex[word].vectorArray[argz->id - 1] = 1.0;
             
             //cout << "else" << endl;
         }
@@ -155,6 +186,7 @@ void readFile(char *filename, int tn) {
 
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
+        documentsNumber = docNumber;
 	// do sth with number of docs
 
         int thread_counter = 0; // in which thread the string goes
@@ -193,13 +225,49 @@ void readFile(char *filename, int tn) {
 
 
 
+void cosDist() {
+    
+        float sum = 0, metr1 = 0, metr2 = 0;
+        for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
+        {        
+            sum = sum + (it->second.vectorArray[0] * it->second.vectorArray[1]);
+            metr1 = metr1 + (it->second.vectorArray[0] * it->second.vectorArray[0]);
+            metr2 = metr2 + (it->second.vectorArray[1] * it->second.vectorArray[1]);
+        }
+        
+        float distance = 0;
+        distance = sum / (sqrt (metr1) * sqrt (metr2));
+        
+        
+        cout << "Cosine Distance for 1, 2: " << distance << endl;
+
+        metr1 = 0; metr2 = 0;
+        sum = 0;
+        for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
+        {        
+            sum = sum + (it->second.vectorArray[0] * it->second.vectorArray[7]);
+            metr1 = metr1 + (it->second.vectorArray[0] * it->second.vectorArray[0]);
+            metr2 = metr2 + (it->second.vectorArray[7] * it->second.vectorArray[7]);
+        }
+        
+        distance = 0;
+        distance = sum / (sqrt (metr1) * sqrt (metr2));
+
+        cout << "Cosine Distance for 1, 8: " << distance << endl;
+
+}
+
+
+
+
 int main() {
     
     int threads_num  = 3;
     
     readFile("Data.txt", threads_num);
 
-    printMap();
+    printList();
+    cosDist();
 
     cout << "Man with boobssssss" << endl;
 
