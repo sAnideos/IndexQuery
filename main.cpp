@@ -20,7 +20,7 @@ using namespace std;
 
 static const int num_threads = 2;
 int documentsNumber = 7;
-int queriesNumber = 7;
+int queriesNumber = 3;
 
 
 class Element {
@@ -48,6 +48,16 @@ typedef struct list {
 }list;
 
 
+class Numbers {
+    
+    public:
+        
+        int exists;
+        float weight;
+    
+};
+
+
 class Thing {
     
     public:
@@ -55,11 +65,11 @@ class Thing {
         int crowd;
         list *firstNode;
         list *head = new list;
-        vector<float> vectorArray;
+        vector<Numbers> vectorArray;
 
 
         Thing() {
-            crowd = 1;
+            crowd = 0;
             //head = NULL;
             firstNode = head;
             //vectorArray = new vector<float>(size, 0.0);
@@ -85,6 +95,7 @@ class Thing {
 
 
 unordered_map <string, Thing> InvertedIndex; // the Inverted Index
+unordered_map <int, int> term_freq; // how many terms in a document and the queries of course
 int *queryTopK;
 
 list *addToList(list *old_node, int num){
@@ -139,11 +150,16 @@ void printList(){
             cout << "     ";
             for(int i = 0; i < it->second.vectorArray.size(); i++)
             {
-                cout << it->second.vectorArray.at(i) << " ";
+                cout << it->second.vectorArray.at(i).exists << " ";
             }
             cout << endl;
         }
         cout << endl;
+        
+        for(int i = 0; i < 14; i++)
+        {
+            cout << term_freq[i] << " ";
+        }
         
 
 }
@@ -157,19 +173,22 @@ void *call_from_thread(void *a) {
     istringstream iss(argz->doc);
     string word;
 
+    if(term_freq.find(argz->id - 1) != term_freq.end())
+    {
+        term_freq[argz->id - 1] = 0;
+    }
     
 
     while(iss >> word)
     {
 
         //cout << word << endl;
+
         
-        if (InvertedIndex.find(word) != InvertedIndex.end()) {
-            
-            InvertedIndex[word].incrementCrowd();
+        if (InvertedIndex.find(word) != InvertedIndex.end())
+        {
             InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
-            InvertedIndex[word].vectorArray.at(argz->id - 1) = 1.0;
-            
+             //            
         }
         else {
                 
@@ -179,17 +198,66 @@ void *call_from_thread(void *a) {
             
             // add first docID
             InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
-            InvertedIndex[word].vectorArray.at(argz->id - 1) = 1.0;
             
             //cout << "else" << endl;
         }
+        
+        if(InvertedIndex[word].vectorArray.at(argz->id - 1).exists == 0)
+        {
+            InvertedIndex[word].incrementCrowd();
+        }
+        
+        InvertedIndex[word].vectorArray.at(argz->id - 1).exists ++;
+        
+        if(term_freq[argz->id - 1] < InvertedIndex[word].vectorArray.at(argz->id - 1).exists)
+        {
+            term_freq[argz->id - 1] = InvertedIndex[word].vectorArray.at(argz->id - 1).exists;
+        }
+
 
     }
+ 
     return NULL;
 } 
 
+
+
+void compute_word_weight(string word, int start, int end)
+{
+    for(int i = start; i < end; i++)
+    {
+        int id = i;
+        if(InvertedIndex[word].vectorArray.at(id).exists != 0)
+        {
+            //computing the final weight
+            double td;
+
+            double idf;
+
+            double weight;
+            
+            td = (double)InvertedIndex[word].vectorArray.at(id).exists / (double)term_freq[id];
+
+            idf = log((double)documentsNumber / (double)InvertedIndex[word].crowd);
+
+            weight = td * idf;
+            InvertedIndex[word].vectorArray.at(id).weight = weight;
+        }
+        else
+        {
+            InvertedIndex[word].vectorArray.at(id).weight = 0.0;
+        }
+    }
+    
+
+    
+    
+}
+
+
+
 int queryCounter = 0;
-//This function will be called from a thread
+//This function will be called from a thread adds query terms to the Inverted Index
 void *call_from_thread_query(void *a) {
 	
     Element *argz = (Element *) a;
@@ -197,36 +265,47 @@ void *call_from_thread_query(void *a) {
     istringstream iss(argz->doc);
     string word;
 
-    
+    int column_id = documentsNumber + queryCounter;
+    if(term_freq.find(column_id) != term_freq.end())
+    {
+      term_freq[column_id] = 0;
+    }
 
     while(iss >> word)
     {
 
-        //cout << word << endl;
         
+        //cout << word << endl;
+
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
             
-            InvertedIndex[word].vectorArray.at(documentsNumber + queryCounter) = 1.0;
-            
-            
-        } /* if word of query doesnt exist in map then dont add it
-        else {
-                
-            Thing thing;
-            InvertedIndex[word] = thing;
-            
-            // add first docID
-            InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
-            InvertedIndex[word].vectorArray[argz->id - 1] = 1.0;
-            
-            //cout << "else" << endl;
-        } */
+            InvertedIndex[word].vectorArray.at(column_id).exists ++;
+            compute_word_weight(word, 0, documentsNumber);
+ 
+        }
+        term_freq[column_id] ++;
+        
 
 
     }
+    
+    istringstream idd(argz->doc);
+    while(idd >> word)
+    {
+        if (InvertedIndex.find(word) != InvertedIndex.end()) {
+            compute_word_weight(word, documentsNumber + queryCounter, column_id +1);
+        }
+    }
+    cout <<endl;
+    
     queryCounter++;
     return NULL;
 }
+
+
+
+
+
 
 
 void readFile(char *filename, int tn) {
@@ -291,6 +370,7 @@ void readQueryFile(char *filename, int tn) {
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
         queriesNumber = docNumber;
+
         
         for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
         {
@@ -320,20 +400,19 @@ void readQueryFile(char *filename, int tn) {
                 // convert id to string to check length
                 idString = to_string(id);
                 cout << "id of query is: " << id << endl;
-                str = str.substr(idString.length(), str.length());
+                str = str.substr(idString.length() + 1, str.length());
                 //cout << id << str << endl;
-                
                 
                 // found the query's topk, do stuff with it
                 int topk = atoi(str.c_str());
                 // convert topk to string to check length
                 topkString = to_string(topk);
                 cout << "topk of query is: " << topk << endl;
-                str = str.substr(topkString.length(), str.length());
+                str = str.substr(topkString.length() + 1, str.length());
                 //cout << id << str << endl;
                 queryTopK[topKcounter] = topk;
                 
-                
+                cout << "after party: " << str << endl;
                 Element *args = new Element(id, str);
 
                 //Launch a thread
@@ -364,9 +443,9 @@ void cosDist(int v1, int v2) {
         float sum = 0, metr1 = 0, metr2 = 0;
         for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
         {        
-            sum = sum + (it->second.vectorArray.at(v1) * it->second.vectorArray.at(v2));
-            metr1 = metr1 + (it->second.vectorArray.at(v1) * it->second.vectorArray.at(v1));
-            metr2 = metr2 + (it->second.vectorArray.at(v2) * it->second.vectorArray.at(v2));
+            sum = sum + (it->second.vectorArray.at(v1).exists * it->second.vectorArray.at(v2).exists);
+            metr1 = metr1 + (it->second.vectorArray.at(v1).exists * it->second.vectorArray.at(v1).exists);
+            metr2 = metr2 + (it->second.vectorArray.at(v2).exists * it->second.vectorArray.at(v2).exists);
         }
         
         float distance = 0;
@@ -388,7 +467,7 @@ void cosDist(int v1, int v2) {
 
 int main() {
     
-    int threads_num  = 3;
+    int threads_num  = 1;
     
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
@@ -397,7 +476,7 @@ int main() {
     //cosDist(0,7);
     
 
-
+    
     cout << "Man with boobssssss" << endl;
 
     return 0;
