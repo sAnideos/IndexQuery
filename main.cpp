@@ -208,15 +208,18 @@ void *call_from_thread(void *a) {
         }
         
         InvertedIndex[word].vectorArray.at(argz->id - 1).exists ++;
-        
+        /*
         if(term_freq[argz->id - 1] < InvertedIndex[word].vectorArray.at(argz->id - 1).exists)
         {
             term_freq[argz->id - 1] = InvertedIndex[word].vectorArray.at(argz->id - 1).exists;
         }
+        */
+        term_freq[argz->id - 1]++;
+        
 
 
     }
- 
+ // kali cout! cout << "term frequency: " << term_freq[argz->id - 1] << endl;
     return NULL;
 } 
 
@@ -256,12 +259,60 @@ void compute_word_weight(string word, int start, int end)
 
 
 
+vector<Numbers> compute_union(vector<Numbers> v1, vector<Numbers> v2)
+{
+    
+    vector<Numbers> univector;
+    univector.resize(documentsNumber);
+    
+    
+    for(int i = 0; i < documentsNumber; i++)
+    {
+        if((v1.at(i).exists != 0) || (v2.at(i).exists != 0))
+        {
+            univector.at(i).exists = 1;
+        }
+    }
+    
+    return univector;
+}
+
+
+
+// Cosine Distance
+void cosDist(int v1, int v2) {
+    
+        double sum = 0, metr1 = 0, metr2 = 0;
+        for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
+        {        
+            sum = sum + (it->second.vectorArray.at(v1).weight * it->second.vectorArray.at(v2).weight);
+            metr1 = metr1 + (it->second.vectorArray.at(v1).weight * it->second.vectorArray.at(v1).weight);
+            metr2 = metr2 + (it->second.vectorArray.at(v2).weight * it->second.vectorArray.at(v2).weight);
+        }
+        
+        double distance = 0;
+        if(metr1 != 0 && metr2 != 0)
+        {
+            distance = sum / (sqrt (metr1) * sqrt (metr2));
+        }
+        
+        
+        cout << "Cosine Distance for " << v1+1 << "," << v2+1 << " is " << distance << endl;
+
+}
+
+
+
+
+
 int queryCounter = 0;
 //This function will be called from a thread adds query terms to the Inverted Index
+// to issstring na fygei na mpei mia metavliti sti thesi tou oxi 3
 void *call_from_thread_query(void *a) {
 	
     Element *argz = (Element *) a;
 
+    // adding query into the Inverted Index
     istringstream iss(argz->doc);
     string word;
 
@@ -289,14 +340,63 @@ void *call_from_thread_query(void *a) {
 
     }
     
+    int wordcount = 0;
+    // Computing weight of every term in the query
     istringstream idd(argz->doc);
     while(idd >> word)
     {
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
             compute_word_weight(word, documentsNumber + queryCounter, column_id +1);
         }
+        wordcount ++;
     }
     cout <<endl;
+    
+    // Computing cosine distance of the query and the relative documents
+    // na apofeugoume apostaseis pou exoume idi ypologisei
+    
+    istringstream iff(argz->doc);
+    string word2;
+    
+    // count tis lekseis stin panw while gia ti for
+    int while_count = 0;
+    int temp_wordcount = wordcount;
+    iff >> word;
+    vector<Numbers> univector;
+    
+    while (InvertedIndex.find(word) == InvertedIndex.end() && while_count < temp_wordcount) {
+        
+        iff >> word;
+        wordcount --;
+    }
+    
+    if(InvertedIndex.find(word) != InvertedIndex.end())
+    {
+        univector = InvertedIndex[word].vectorArray;
+
+        if(wordcount > 1)
+        {
+            for(int count = 0; count < wordcount - 1; count++)
+            {
+                iff >> word2;
+
+                if (InvertedIndex.find(word2) != InvertedIndex.end()) {
+
+                    univector = compute_union(univector, InvertedIndex[word2].vectorArray);
+
+                }
+            }
+        }
+
+        for(int i = 0; i < documentsNumber; i++)
+        {
+            if(univector.at(i).exists != 0)
+            {
+                cosDist(i, column_id);
+            }
+        }
+
+    }
     
     queryCounter++;
     return NULL;
@@ -338,7 +438,7 @@ void readFile(char *filename, int tn) {
                 //cout << "id is: " << wordId << endl;
                 
                 str = str.substr(wordId.length(), str.length());
-                cout << id << str << endl;
+               // kali cout! cout << id << str << endl;
                 
                 Element *args = new Element(id, str);
 
@@ -438,23 +538,7 @@ void readQueryFile(char *filename, int tn) {
 
 
 
-void cosDist(int v1, int v2) {
-    
-        float sum = 0, metr1 = 0, metr2 = 0;
-        for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
-        {        
-            sum = sum + (it->second.vectorArray.at(v1).exists * it->second.vectorArray.at(v2).exists);
-            metr1 = metr1 + (it->second.vectorArray.at(v1).exists * it->second.vectorArray.at(v1).exists);
-            metr2 = metr2 + (it->second.vectorArray.at(v2).exists * it->second.vectorArray.at(v2).exists);
-        }
-        
-        float distance = 0;
-        distance = sum / (sqrt (metr1) * sqrt (metr2));
-        
-        
-        cout << "Cosine Distance for " << v1+1 << "," << v2+1 << " is " << distance << endl;
 
-}
 
 
 /*
@@ -472,10 +556,19 @@ int main() {
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
 
-    printList();
+    //printList();
     //cosDist(0,7);
-    
+    //cosDist(10, 11);
 
+    /*
+    vector<Numbers> vec;
+    vec = compute_union(InvertedIndex["first"].vectorArray, InvertedIndex["document"].vectorArray);
+    for(int i = 0; i < documentsNumber; i++)
+    {
+        cout << vec.at(i).exists << "  ";
+    }
+    cout << endl << endl;
+    */
     
     cout << "Man with boobssssss" << endl;
 
