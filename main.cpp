@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <tgmath.h>
 #include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -28,13 +29,15 @@ class Element {
     public:
 
         int id;
+        int topk;
         string doc;
 
 
-        Element(int i, string d){
+        Element(int i, int t, string d){
 
             id = i;
             doc = d;
+            topk = t;
         }
 
 };
@@ -96,6 +99,7 @@ class Thing {
 
 unordered_map <string, Thing> InvertedIndex; // the Inverted Index
 unordered_map <int, int> term_freq; // how many terms in a document and the queries of course
+unordered_map <string, int> stopwords; // stopwords
 int *queryTopK;
 
 list *addToList(list *old_node, int num){
@@ -121,6 +125,17 @@ void printList(list *head) {
         node = node->next;
     }
     cout << endl;
+}
+
+bool searchList(list *head, int id) {
+    list *node = head;
+    while (node->next != NULL) {
+        if (node->next->docID == id) {
+            return true;
+        }
+        node = node->next;
+    }
+    return false;
 }
 
 
@@ -165,6 +180,22 @@ void printList(){
 }
 
 
+string checkWord(string word) {
+        // remove punctuation
+        char ch = word.back();
+        if (ispunct(ch)) {
+            word = word.substr(0, word.size()-1);
+        }
+        // toLower case for all words in index
+        transform(word.begin(), word.end(), word.begin(), ::tolower);
+        // remove stopwords
+        if (stopwords.find(word) != stopwords.end()) {
+            word = "";
+        }
+        return word;
+}
+
+
 //This function will be called from a thread
 void *call_from_thread(void *a) {
 	
@@ -178,17 +209,19 @@ void *call_from_thread(void *a) {
         term_freq[argz->id - 1] = 0;
     }
     
-
     while(iss >> word)
     {
-
-        //cout << word << endl;
-
+        word = checkWord(word);
+        if (word == "") {
+            continue;
+        }
         
-        if (InvertedIndex.find(word) != InvertedIndex.end())
+        if (InvertedIndex.find(word) != InvertedIndex.end()) // an yparxei word sto index
         {
-            InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
-             //            
+            if (!searchList(InvertedIndex[word].firstNode, argz->id)) {
+                InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
+            }
+                     
         }
         else {
                 
@@ -280,7 +313,7 @@ vector<Numbers> compute_union(vector<Numbers> v1, vector<Numbers> v2)
 
 
 // Cosine Distance
-void cosDist(int v1, int v2) {
+double cosDist(int v1, int v2) {
     
         double sum = 0, metr1 = 0, metr2 = 0;
         for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
@@ -298,6 +331,8 @@ void cosDist(int v1, int v2) {
         
         
         cout << "Cosine Distance for " << v1+1 << "," << v2+1 << " is " << distance << endl;
+        
+        return distance;
 
 }
 
@@ -309,8 +344,17 @@ int queryCounter = 0;
 //This function will be called from a thread adds query terms to the Inverted Index
 // to issstring na fygei na mpei mia metavliti sti thesi tou oxi 3
 void *call_from_thread_query(void *a) {
-	
+    ofstream outFile;
     Element *argz = (Element *) a;
+    
+    int topk = argz->topk;
+    Numbers *topkArray = new Numbers[topk]; // to be sorted so as to get top K results
+    
+    if (!outFile.is_open()) {
+        //remove("out.txt");
+        outFile.open("out.txt", ios::app);
+    }
+    
 
     // adding query into the Inverted Index
     istringstream iss(argz->doc);
@@ -388,14 +432,61 @@ void *call_from_thread_query(void *a) {
             }
         }
 
-        for(int i = 0; i < documentsNumber; i++)
+        int topK_counterino = 0;
+        for (int i = 0; i < topk; i++) {
+            topkArray[i].weight = 0;
+            topkArray[i].exists = -1;
+        }
+        for(int i = 0; i < documentsNumber; i++) // i variable is document id
         {
             if(univector.at(i).exists != 0)
             {
-                cosDist(i, column_id);
+                if (topK_counterino == topk) {
+                    float similarity = (float)cosDist(i, column_id);
+                    if (similarity > topkArray[topk-1].weight) {
+                        
+                        topkArray[topk-1].exists = i;
+                        topkArray[topk-1].weight = similarity;
+                        
+                        sort(topkArray, topkArray + topk,
+                            [](Numbers const & a, Numbers const & b) -> bool
+                            { return a.weight > b.weight; } 
+                        );
+                        
+                    }
+                }
+                else {
+                    topkArray[topK_counterino].exists = i;
+                    topkArray[topK_counterino].weight = (float)cosDist(i, column_id);
+                    if (topK_counterino == topk-1) {// an topk < valid docs tote pote 8a kanei sort?
+                        // if array is full, sort array
+                        sort(topkArray, topkArray + topk,
+                            [](Numbers const & a, Numbers const & b) -> bool
+                            { return a.weight > b.weight; } 
+                        );
+                    }
+                    topK_counterino++;
+                }
+                
             }
         }
-
+        sort(topkArray, topkArray + topk,
+                            [](Numbers const & a, Numbers const & b) -> bool
+                            { return a.weight > b.weight; } 
+                        );
+        
+        outFile << argz->id << ". ";// <<"\n";
+        cout << "---------------- PRINTING FOR QUERY " << argz->id << " (topk=" << argz->topk << ")" << "----------------------------" << endl;
+        for (int i = 0; i < topK_counterino; i++) {
+            cout << "Doc " << topkArray[i].exists+1 << " with cosDist " << topkArray[i].weight << endl;
+            outFile << topkArray[i].exists+1;// << ", ";
+            if (i < topK_counterino-1) {
+                outFile << ", ";
+            }
+        }
+        outFile << "\n";
+        cout << "---------------- ENDOF PRINTING FOR THIS QUERY ----------------------------" << endl;
+        
     }
     
     queryCounter++;
@@ -440,7 +531,7 @@ void readFile(char *filename, int tn) {
                 str = str.substr(wordId.length(), str.length());
                // kali cout! cout << id << str << endl;
                 
-                Element *args = new Element(id, str);
+                Element *args = new Element(id, 0, str);
 
                 //Launch a thread
                 pthread_create(&thread[thread_counter], NULL, call_from_thread, (void *)args);
@@ -513,7 +604,7 @@ void readQueryFile(char *filename, int tn) {
                 queryTopK[topKcounter] = topk;
                 
                 cout << "after party: " << str << endl;
-                Element *args = new Element(id, str);
+                Element *args = new Element(id, topk, str);
 
                 //Launch a thread
                 pthread_create(&thread[thread_counter], NULL, call_from_thread_query, (void *)args);
@@ -537,7 +628,14 @@ void readQueryFile(char *filename, int tn) {
 }
 
 
-
+void createStopwords() {
+    ifstream file("stopwords.txt");
+    string word;
+    while (getline(file, word)) {
+        stopwords[word] = 0;
+        //cout << word << endl;
+    }
+}
 
 
 
@@ -551,12 +649,15 @@ void readQueryFile(char *filename, int tn) {
 
 int main() {
     
+    
+    createStopwords();
+    
     int threads_num  = 1;
     
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
 
-    //printList();
+    printMap();
     //cosDist(0,7);
     //cosDist(10, 11);
 
