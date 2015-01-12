@@ -390,7 +390,7 @@ void *call_from_thread_query(void *a) {
     while(idd >> word)
     {
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
-            compute_word_weight(word, documentsNumber + queryCounter, column_id +1);
+            compute_word_weight(word, column_id, column_id +1);
         }
         wordcount ++;
     }
@@ -652,7 +652,7 @@ int main() {
     
     createStopwords();
     
-    int threads_num  = 1;
+    int threads_num  = 5;
     
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
