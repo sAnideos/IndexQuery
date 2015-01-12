@@ -340,7 +340,7 @@ double cosDist(int v1, int v2) {
 
 
 
-int queryCounter = 0;
+//int queryCounter = 0;
 //This function will be called from a thread adds query terms to the Inverted Index
 // to issstring na fygei na mpei mia metavliti sti thesi tou oxi 3
 void *call_from_thread_query(void *a) {
@@ -360,7 +360,7 @@ void *call_from_thread_query(void *a) {
     istringstream iss(argz->doc);
     string word;
 
-    int column_id = documentsNumber + queryCounter;
+    int column_id = documentsNumber + argz->id;
     if(term_freq.find(column_id) != term_freq.end())
     {
       term_freq[column_id] = 0;
@@ -489,7 +489,7 @@ void *call_from_thread_query(void *a) {
         
     }
     
-    queryCounter++;
+    //queryCounter++;
     return NULL;
 }
 
@@ -657,19 +657,7 @@ int main() {
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
 
-    printMap();
-    //cosDist(0,7);
-    //cosDist(10, 11);
-
-    /*
-    vector<Numbers> vec;
-    vec = compute_union(InvertedIndex["first"].vectorArray, InvertedIndex["document"].vectorArray);
-    for(int i = 0; i < documentsNumber; i++)
-    {
-        cout << vec.at(i).exists << "  ";
-    }
-    cout << endl << endl;
-    */
+    //printMap();
     
     cout << "Man with boobssssss" << endl;
 
