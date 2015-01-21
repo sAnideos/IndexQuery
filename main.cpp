@@ -16,12 +16,23 @@
 #include <tgmath.h>
 #include <vector>
 #include <algorithm>
+#include <iomanip>
+#include <chrono>
+#include <ctime>
+#include <sys/time.h>  
+#include <stdio.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 using namespace std;
 
 static const int num_threads = 2;
 int documentsNumber = 7;
 int queriesNumber = 3;
+
+double index_duration = 0.0;
+double queries_duration = 0.0;
+double reading_duration = 0.0;
 
 
 class Element {
@@ -198,6 +209,12 @@ string checkWord(string word) {
 
 //This function will be called from a thread
 void *call_from_thread(void *a) {
+    
+    struct rusage usage;
+    struct timeval start, end;
+    getrusage(RUSAGE_SELF, &usage);
+    start = usage.ru_stime;
+  
 	
     Element *argz = (Element *) a;
 
@@ -252,7 +269,18 @@ void *call_from_thread(void *a) {
 
 
     }
- // kali cout! cout << "term frequency: " << term_freq[argz->id - 1] << endl;
+    // kali cout! cout << "term frequency: " << term_freq[argz->id - 1] << endl;
+    
+    getrusage(RUSAGE_SELF, &usage);
+    end = usage.ru_stime;
+    
+    double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
+    index_duration = index_duration + timer_spent*1000.0;
+    printf("Started at: %ld.%lds\n", start.tv_sec, start.tv_usec);
+    printf("Ended at: %ld.%lds\n", end.tv_sec, end.tv_usec);
+    cout << "Time spent: " << timer_spent << " ms" << endl;
+    
+    
     return NULL;
 } 
 
@@ -344,6 +372,13 @@ double cosDist(int v1, int v2) {
 //This function will be called from a thread adds query terms to the Inverted Index
 // to issstring na fygei na mpei mia metavliti sti thesi tou oxi 3
 void *call_from_thread_query(void *a) {
+    
+    struct rusage usage;
+    struct timeval start, end;
+    getrusage(RUSAGE_SELF, &usage);
+    start = usage.ru_stime;
+    
+    
     ofstream outFile;
     Element *argz = (Element *) a;
     
@@ -355,12 +390,11 @@ void *call_from_thread_query(void *a) {
         outFile.open("out.txt", ios::app);
     }
     
-
     // adding query into the Inverted Index
     istringstream iss(argz->doc);
     string word;
 
-    int column_id = documentsNumber + argz->id;
+    int column_id = documentsNumber + argz->id - 1;
     if(term_freq.find(column_id) != term_freq.end())
     {
       term_freq[column_id] = 0;
@@ -373,7 +407,6 @@ void *call_from_thread_query(void *a) {
         //cout << word << endl;
 
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
-            
             InvertedIndex[word].vectorArray.at(column_id).exists ++;
             compute_word_weight(word, 0, documentsNumber);
  
@@ -383,7 +416,7 @@ void *call_from_thread_query(void *a) {
 
 
     }
-    
+    cout << "cccc" << endl;
     int wordcount = 0;
     // Computing weight of every term in the query
     istringstream idd(argz->doc);
@@ -489,6 +522,16 @@ void *call_from_thread_query(void *a) {
         
     }
     
+    
+    getrusage(RUSAGE_SELF, &usage);
+    end = usage.ru_stime;
+    
+    double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
+    queries_duration = queries_duration + timer_spent*1000.0;
+    printf("Started at: %ld.%lds\n", start.tv_sec, start.tv_usec);
+    printf("Ended at: %ld.%lds\n", end.tv_sec, end.tv_usec);
+    cout << "Time spent: " << timer_spent << " ms" << endl;
+    
     //queryCounter++;
     return NULL;
 }
@@ -500,6 +543,14 @@ void *call_from_thread_query(void *a) {
 
 
 void readFile(char *filename, int tn) {
+    
+        struct rusage usage;
+        struct timeval start, end;
+        getrusage(RUSAGE_SELF, &usage);
+        start = usage.ru_stime;
+    
+    
+    
 	ifstream file(filename);
 	string str;
 
@@ -549,9 +600,25 @@ void readFile(char *filename, int tn) {
             
 		cout << endl;
 	}
+        
+        getrusage(RUSAGE_SELF, &usage);
+        end = usage.ru_stime;
+
+        double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
+        reading_duration = reading_duration + timer_spent*1000.0;
+        
+        
 } 
 
 void readQueryFile(char *filename, int tn) {
+    
+        struct rusage usage;
+        struct timeval start, end;
+        getrusage(RUSAGE_SELF, &usage);
+        start = usage.ru_stime;
+    
+    
+    
         ifstream file(filename);
 	string str;
 
@@ -625,6 +692,11 @@ void readQueryFile(char *filename, int tn) {
                  //cout << "test" << endl;
                  
 	}
+        getrusage(RUSAGE_SELF, &usage);
+        end = usage.ru_stime;
+
+        double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
+        reading_duration = reading_duration + timer_spent*1000.0;
 }
 
 
@@ -648,16 +720,37 @@ void createStopwords() {
 
 
 int main() {
-    
-    
     createStopwords();
+    struct timeval tim;
     
-    int threads_num  = 5;
+    auto t_start = chrono::high_resolution_clock::now();
+    
+    gettimeofday(&tim, NULL);  
+    double t1=tim.tv_sec+(tim.tv_usec/1000000.0);  
+      
+    
+    
+    
+    
+    int threads_num  = 4;
     
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
 
     //printMap();
+    
+    auto t_end = chrono::high_resolution_clock::now();
+    gettimeofday(&tim, NULL);  
+    double t2=tim.tv_sec+(tim.tv_usec/1000000.0);
+    
+    cout << "Wall clock time passed: "
+              << std::chrono::duration<double, std::milli>(t_end-t_start).count()
+              << " ms\n";
+    cout << "Pure time passed: " << (t2-t1)*1000 << " ms\n";
+    cout << "Duration time for reading files passed: " << reading_duration << " ms\n";
+    cout << "Duration time for index creation passed: " << index_duration << " ms\n";
+    cout << "Duration time for queries passed: " << queries_duration << " ms\n";
+    cout << "Duration time overall in threads passed: " << index_duration+queries_duration << " ms\n";
     
     cout << "Man with boobssssss" << endl;
 
