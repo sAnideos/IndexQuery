@@ -26,6 +26,10 @@
 
 using namespace std;
 
+
+
+int test_var = 0;
+
 static const int num_threads = 2;
 int documentsNumber = 7;
 int queriesNumber = 3;
@@ -33,6 +37,8 @@ int queriesNumber = 3;
 double index_duration = 0.0;
 double queries_duration = 0.0;
 double reading_duration = 0.0;
+pthread_mutex_t mutexInverIndex;
+pthread_mutex_t mutexQuery;
 
 
 class Element {
@@ -210,11 +216,15 @@ string checkWord(string word) {
 //This function will be called from a thread
 void *call_from_thread(void *a) {
     
+    
+        pthread_t         self;
+self = pthread_self();
+
     struct rusage usage;
     struct timeval start, end;
     getrusage(RUSAGE_SELF, &usage);
     start = usage.ru_stime;
-  
+
 	
     Element *argz = (Element *) a;
 
@@ -232,7 +242,8 @@ void *call_from_thread(void *a) {
         if (word == "") {
             continue;
         }
-        
+        pthread_mutex_lock (&mutexInverIndex);
+  
         if (InvertedIndex.find(word) != InvertedIndex.end()) // an yparxei word sto index
         {
             if (!searchList(InvertedIndex[word].firstNode, argz->id)) {
@@ -258,6 +269,7 @@ void *call_from_thread(void *a) {
         }
         
         InvertedIndex[word].vectorArray.at(argz->id - 1).exists ++;
+
         /*
         if(term_freq[argz->id - 1] < InvertedIndex[word].vectorArray.at(argz->id - 1).exists)
         {
@@ -265,7 +277,7 @@ void *call_from_thread(void *a) {
         }
         */
         term_freq[argz->id - 1]++;
-        
+        pthread_mutex_unlock (&mutexInverIndex);
 
 
     }
@@ -276,10 +288,10 @@ void *call_from_thread(void *a) {
     
     double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
     index_duration = index_duration + timer_spent*1000.0;
-    printf("Started at: %ld.%lds\n", start.tv_sec, start.tv_usec);
-    printf("Ended at: %ld.%lds\n", end.tv_sec, end.tv_usec);
-    cout << "Time spent: " << timer_spent << " ms" << endl;
-    
+    //printf("Started at: %ld.%lds\n", start.tv_sec, start.tv_usec);
+    //printf("Ended at: %ld.%lds\n", end.tv_sec, end.tv_usec);
+    //cout << "Time spent: " << timer_spent << " ms" << endl;
+
     
     return NULL;
 } 
@@ -358,7 +370,7 @@ double cosDist(int v1, int v2) {
         }
         
         
-        cout << "Cosine Distance for " << v1+1 << "," << v2+1 << " is " << distance << endl;
+        //cout << "Cosine Distance for " << v1+1 << "," << v2+1 << " is " << distance << endl;
         
         return distance;
 
@@ -373,6 +385,7 @@ double cosDist(int v1, int v2) {
 // to issstring na fygei na mpei mia metavliti sti thesi tou oxi 3
 void *call_from_thread_query(void *a) {
     
+
     struct rusage usage;
     struct timeval start, end;
     getrusage(RUSAGE_SELF, &usage);
@@ -405,6 +418,7 @@ void *call_from_thread_query(void *a) {
 
         
         //cout << word << endl;
+pthread_mutex_lock (&mutexQuery);
 
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
             InvertedIndex[word].vectorArray.at(column_id).exists ++;
@@ -412,18 +426,24 @@ void *call_from_thread_query(void *a) {
  
         }
         term_freq[column_id] ++;
-        
+
+pthread_mutex_unlock (&mutexQuery);       
 
 
     }
-    cout << "cccc" << endl;
     int wordcount = 0;
     // Computing weight of every term in the query
     istringstream idd(argz->doc);
+    
     while(idd >> word)
     {
+       // 
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
             compute_word_weight(word, column_id, column_id +1);
+        }
+        else
+        {
+            
         }
         wordcount ++;
     }
@@ -431,7 +451,6 @@ void *call_from_thread_query(void *a) {
     
     // Computing cosine distance of the query and the relative documents
     // na apofeugoume apostaseis pou exoume idi ypologisei
-    
     istringstream iff(argz->doc);
     string word2;
     
@@ -442,9 +461,8 @@ void *call_from_thread_query(void *a) {
     vector<Numbers> univector;
     
     while (InvertedIndex.find(word) == InvertedIndex.end() && while_count < temp_wordcount) {
-        
         iff >> word;
-        wordcount --;
+        temp_wordcount --;
     }
     
     if(InvertedIndex.find(word) != InvertedIndex.end())
@@ -528,9 +546,11 @@ void *call_from_thread_query(void *a) {
     
     double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
     queries_duration = queries_duration + timer_spent*1000.0;
-    printf("Started at: %ld.%lds\n", start.tv_sec, start.tv_usec);
-    printf("Ended at: %ld.%lds\n", end.tv_sec, end.tv_usec);
-    cout << "Time spent: " << timer_spent << " ms" << endl;
+    
+    //they are needed dont delete plis
+    //printf("Started at: %ld.%lds\n", start.tv_sec, start.tv_usec);
+    //printf("Ended at: %ld.%lds\n", end.tv_sec, end.tv_usec);
+    //cout << "Time spent: " << timer_spent << " ms" << endl;
     
     //queryCounter++;
     return NULL;
@@ -589,16 +609,20 @@ void readFile(char *filename, int tn) {
                 
 
                 //Join the thread with the main thread
-                pthread_join(thread[thread_counter], NULL);
+                //pthread_join(thread[thread_counter], NULL);
 
                 //reset counter if xyzs thread number
                 thread_counter++;
                 if(thread_counter == tn)
                 {
+                    for(int i = 0; i < tn; i++)
+                    {
+                        pthread_join(thread[i], NULL);
+                    }
                     thread_counter = 0;
                 }
             
-		cout << endl;
+		//cout << endl;
 	}
         
         getrusage(RUSAGE_SELF, &usage);
@@ -616,7 +640,7 @@ void readQueryFile(char *filename, int tn) {
         struct timeval start, end;
         getrusage(RUSAGE_SELF, &usage);
         start = usage.ru_stime;
-    
+        cout << "TNT: " << tn << endl;
     
     
         ifstream file(filename);
@@ -624,6 +648,7 @@ void readQueryFile(char *filename, int tn) {
 
 
         pthread_t thread[tn];
+
 
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
@@ -646,8 +671,7 @@ void readQueryFile(char *filename, int tn) {
 	// read first sentence from txt
 	while (getline(file, str))
 	{
-            
-            
+                       
 		// Process str
 		//istringstream iss(str);
 		string idString;
@@ -657,28 +681,27 @@ void readQueryFile(char *filename, int tn) {
                 int id = atoi(str.c_str());
                 // convert id to string to check length
                 idString = to_string(id);
-                cout << "id of query is: " << id << endl;
+                //cout << "id of query is: " << id << endl;
                 str = str.substr(idString.length() + 1, str.length());
-                //cout << id << str << endl;
                 
                 // found the query's topk, do stuff with it
                 int topk = atoi(str.c_str());
                 // convert topk to string to check length
                 topkString = to_string(topk);
-                cout << "topk of query is: " << topk << endl;
+                //cout << "topk of query is: " << topk << endl;
                 str = str.substr(topkString.length() + 1, str.length());
                 //cout << id << str << endl;
                 queryTopK[topKcounter] = topk;
                 
-                cout << "after party: " << str << endl;
+                //cout << "after party: " << str << endl;
                 Element *args = new Element(id, topk, str);
 
                 //Launch a thread
                 pthread_create(&thread[thread_counter], NULL, call_from_thread_query, (void *)args);
+                cout<< "thread_counter: " << thread_counter << endl; 
                 
-
                 //Join the thread with the main thread
-                pthread_join(thread[thread_counter], NULL);
+                //pthread_join(thread[thread_counter], NULL);
 
                 //reset counter if xyzs thread number
                 thread_counter++;
@@ -686,12 +709,18 @@ void readQueryFile(char *filename, int tn) {
                 {
                     thread_counter = 0;
                 }
+               
             
-		cout << endl;
-                
-                 //cout << "test" << endl;
+		//cout << endl;
                  
 	}
+        cout << "Be-for" << endl;
+        for(int i = 0; i < tn; i++)
+        {
+            cout << "Before join" << endl;
+            pthread_join(thread[i], NULL);
+            cout << "After join" << endl;
+        }
         getrusage(RUSAGE_SELF, &usage);
         end = usage.ru_stime;
 
@@ -732,7 +761,7 @@ int main() {
     
     
     
-    int threads_num  = 4;
+    int threads_num  = 1;
     
     readFile("Data.txt", threads_num);
     readQueryFile("Queries.txt", threads_num);
