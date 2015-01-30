@@ -1,6 +1,2 @@
-5
+1
 1 3 pikachu abra
-2 3 alakazam
-3 4 bulbasaur
-4 3 charmander
-5 2 pokemon master
