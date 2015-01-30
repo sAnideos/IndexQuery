@@ -769,25 +769,28 @@ void createStopwords() {
 
 
 int main() {
-    createStopwords();
-    
-    pthread_mutex_init(&mutexInverIndex, NULL);
-    pthread_mutex_init(&mutexQuery, NULL);
-    pthread_mutex_init(&mutexQuery1, NULL);
     
     
+        
     struct timeval tim;
     
     auto t_start = chrono::high_resolution_clock::now();
     
     gettimeofday(&tim, NULL);  
     double t1=tim.tv_sec+(tim.tv_usec/1000000.0);  
+    createStopwords();
+    
+    pthread_mutex_init(&mutexInverIndex, NULL);
+    pthread_mutex_init(&mutexQuery, NULL);
+    pthread_mutex_init(&mutexQuery1, NULL);
+    
+
       
     
     
     
     
-    int threads_num  = 4;
+    int threads_num  = 2;
     
     readFile("Data.txt", threads_num);
     cout << "Duration time for index creation passed: " << index_duration << " ms\n";
