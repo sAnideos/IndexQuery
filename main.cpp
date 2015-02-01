@@ -40,6 +40,7 @@ double index_duration = 0.0;
 double queries_duration = 0.0;
 double reading_duration = 0.0;
 pthread_mutex_t mutexInverIndex;
+pthread_mutex_t mutexInverIndex2;
 pthread_mutex_t mutexQuery;
 pthread_mutex_t mutexQuery1;
 pthread_mutex_t mutexQuery2;
@@ -205,8 +206,15 @@ void printList(){
 
 }
 
+double checking_duration = 0.0;
 
 string checkWord(string word) {
+    struct rusage usage;
+//        struct timeval start, end;
+//        getrusage(RUSAGE_SELF, &usage);
+//        start = usage.ru_stime;
+    
+    
         // remove punctuation
         char ch = word.back();
         if (ispunct(ch)) {
@@ -218,6 +226,15 @@ string checkWord(string word) {
         if (stopwords.find(word) != stopwords.end()) {
             word = "";
         }
+        
+        
+//        getrusage(RUSAGE_SELF, &usage);
+//        end = usage.ru_stime;
+//
+//        double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
+//        checking_duration = checking_duration + timer_spent*1000.0;
+        
+        
         return word;
 }
 
@@ -245,14 +262,75 @@ void *call_from_thread(void *a) {
         term_freq[argz->id - 1] = 0;
     }
     
+    unordered_map <string, int> map;
+    int count = 0;
+    
     while(iss >> word)
     {
         word = checkWord(word);
         if (word == "") {
             continue;
         }
-        pthread_mutex_lock (&mutexInverIndex);
-  
+        
+        //pthread_mutex_lock (&mutexInverIndex);
+        
+        
+        count++;
+        
+        
+        
+        
+        
+        
+//        if (map.find(word) != map.end()) // an yparxei word sto index
+//        {
+////            if (!searchList(InvertedIndex[word].firstNode, argz->id)) {
+////                InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
+////            }
+//                     
+//        }
+        if (map.find(word) == map.end()){
+            
+            //pthread_mutex_lock (&mutexInverIndex);
+            
+            map[word] = 1;
+            
+            //pthread_mutex_unlock (&mutexInverIndex);
+            
+            //cout << "else" << endl;
+        }
+        else {
+            map[word]++;
+        }
+        
+//        if(InvertedIndex[word].vectorArray.at(argz->id - 1).exists == 0)
+//        {
+//            //pthread_mutex_lock (&mutexInverIndex2);
+//            InvertedIndex[word].incrementCrowd();
+//            //pthread_mutex_unlock (&mutexInverIndex2);
+//        }
+//        
+//        InvertedIndex[word].vectorArray.at(argz->id - 1).exists ++;
+//
+//        /*
+//        if(term_freq[argz->id - 1] < InvertedIndex[word].vectorArray.at(argz->id - 1).exists)
+//        {
+//            term_freq[argz->id - 1] = InvertedIndex[word].vectorArray.at(argz->id - 1).exists;
+//        }
+//        */
+//        term_freq[argz->id - 1]++;
+        
+        //pthread_mutex_unlock (&mutexInverIndex);
+
+
+    }
+    // kali cout! cout << "term frequency: " << term_freq[argz->id - 1] << endl;
+    
+    pthread_mutex_lock (&mutexInverIndex);
+    
+    for ( auto it = map.begin(); it != map.end(); ++it ) {
+        
+        word = it->first;
         if (InvertedIndex.find(word) != InvertedIndex.end()) // an yparxei word sto index
         {
             if (!searchList(InvertedIndex[word].firstNode, argz->id)) {
@@ -264,20 +342,23 @@ void *call_from_thread(void *a) {
                 
             Thing thing;
             thing.initializeVector();
+            
+            //pthread_mutex_lock (&mutexInverIndex);
+            
             InvertedIndex[word] = thing;
             
             // add first docID
             InvertedIndex[word].head = addToList(InvertedIndex[word].head, argz->id);
             
+            //pthread_mutex_unlock (&mutexInverIndex);
+            
             //cout << "else" << endl;
         }
+
+        InvertedIndex[word].incrementCrowd();
+ 
         
-        if(InvertedIndex[word].vectorArray.at(argz->id - 1).exists == 0)
-        {
-            InvertedIndex[word].incrementCrowd();
-        }
-        
-        InvertedIndex[word].vectorArray.at(argz->id - 1).exists ++;
+        InvertedIndex[word].vectorArray.at(argz->id - 1).exists = it->second;
 
         /*
         if(term_freq[argz->id - 1] < InvertedIndex[word].vectorArray.at(argz->id - 1).exists)
@@ -285,12 +366,12 @@ void *call_from_thread(void *a) {
             term_freq[argz->id - 1] = InvertedIndex[word].vectorArray.at(argz->id - 1).exists;
         }
         */
-        term_freq[argz->id - 1]++;
-        pthread_mutex_unlock (&mutexInverIndex);
-
-
+        
+        
+        
     }
-    // kali cout! cout << "term frequency: " << term_freq[argz->id - 1] << endl;
+    term_freq[argz->id - 1] = count;
+    pthread_mutex_unlock (&mutexInverIndex);
     
     getrusage(RUSAGE_SELF, &usage);
     end = usage.ru_stime;
@@ -751,11 +832,22 @@ void createStopwords() {
     ifstream file("stopwords.txt");
     string word;
     
+//    struct rusage usage;
+//        struct timeval start, end;
+//        getrusage(RUSAGE_SELF, &usage);
+//        start = usage.ru_stime;
+    
     while (getline(file, word)) {
         
         stopwords[word] = 0;
         
     }
+//    getrusage(RUSAGE_SELF, &usage);
+//        end = usage.ru_stime;
+//
+//        double timer_spent = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec)/1000000.0;
+//        reading_duration = reading_duration + timer_spent*1000.0;
+//        cout << "time spend reading stopwords: " << reading_duration << endl;
 }
 
 
@@ -769,25 +861,25 @@ void createStopwords() {
 
 
 int main() {
-    createStopwords();
-    
-    pthread_mutex_init(&mutexInverIndex, NULL);
-    pthread_mutex_init(&mutexQuery, NULL);
-    pthread_mutex_init(&mutexQuery1, NULL);
     
     
+    int threads_num;
+    cout << "Please give number of threads: ";
+    cin >> threads_num;
+        
     struct timeval tim;
     
     auto t_start = chrono::high_resolution_clock::now();
     
     gettimeofday(&tim, NULL);  
     double t1=tim.tv_sec+(tim.tv_usec/1000000.0);  
-      
+    createStopwords();
     
+    pthread_mutex_init(&mutexInverIndex, NULL);
+    pthread_mutex_init(&mutexInverIndex2, NULL);
+    pthread_mutex_init(&mutexQuery, NULL);
+    pthread_mutex_init(&mutexQuery1, NULL);
     
-    
-    
-    int threads_num  = 4;
     
     readFile("Data.txt", threads_num);
     cout << "Duration time for index creation passed: " << index_duration << " ms\n";
@@ -802,6 +894,7 @@ int main() {
     double t2=tim.tv_sec+(tim.tv_usec/1000000.0);
     
     pthread_mutex_destroy(&mutexInverIndex);
+    pthread_mutex_destroy(&mutexInverIndex2);
     pthread_mutex_destroy(&mutexQuery);
     pthread_mutex_destroy(&mutexQuery1);
     
@@ -813,6 +906,8 @@ int main() {
     cout << "Duration time for index creation passed: " << index_duration << " ms\n";
     cout << "Duration time for queries passed: " << queries_duration << " ms\n";
     cout << "Duration time overall in threads passed: " << index_duration+queries_duration << " ms\n";
+    cout << "Duration time overall in checking words for stuff: " << checking_duration << " ms\n";
+    
     
     cout << "Man with boobssssss" << endl;
     
