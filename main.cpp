@@ -33,8 +33,8 @@ int test_var = 0;
 static const int num_threads = 0;
 int documentsNumber = 0;
 int queriesNumber = 0;
-int count_docs = 0;
-int count_queries = 0;
+//int count_docs = 0;
+//int count_queries = 0;
 
 double index_duration = 0.0;
 double queries_duration = 0.0;
@@ -414,11 +414,41 @@ void compute_word_weight(string word, int start, int end)
             InvertedIndex[word].vectorArray.at(id).weight = 0.0;
         }
     }
-    
-
-    
-    
+       
 }
+
+
+
+
+
+
+double compute_word_weight_query(string word, int id)
+{
+
+        if(InvertedIndex[word].vectorArray.at(id).exists != 0)
+        {
+            //computing the final weight
+            double td;
+
+            double idf;
+
+            double weight;
+            
+            td = (double)InvertedIndex[word].vectorArray.at(id).exists / (double)term_freq[id];
+
+            idf = log((double)documentsNumber / (double)InvertedIndex[word].crowd);
+
+            weight = td * idf;
+            return weight;
+        }
+        else
+        {
+            return 0.0;
+        }
+    
+       
+}
+
 
 
 
@@ -480,7 +510,8 @@ void *call_from_thread_query(void *a) {
     struct timeval start, end;
     getrusage(RUSAGE_SELF, &usage);
     start = usage.ru_stime;
-    
+    pthread_t self;
+    self = pthread_self();
     
     
     ofstream outFile;
@@ -506,7 +537,7 @@ void *call_from_thread_query(void *a) {
       term_freq[column_id] = 0;
     }
 
-    
+    cout << "Thread : " << self << "Computing weights for every word that exists in the query to the documents!" << endl;
     while(iss >> word)
     {
         
@@ -529,22 +560,31 @@ void *call_from_thread_query(void *a) {
     int wordcount = 0;
     // Computing weight of every term in the query
     istringstream idd(argz->doc);
+    cout << "Thread : " << self << "Computing weight of every term in the query!" << endl;
+    unordered_map <string, double> weight_map;
+    
     
     while(idd >> word)
     {
         
         if (InvertedIndex.find(word) != InvertedIndex.end()) {
-            pthread_mutex_lock (&mutexQuery1);
-            compute_word_weight(word, column_id, column_id +1);
-            pthread_mutex_unlock (&mutexQuery1);
-        }
-        else
-        {
-            
+            //pthread_mutex_lock (&mutexQuery1);
+            //compute_word_weight(word, column_id, column_id +1);
+            weight_map[word] = compute_word_weight_query(word, column_id);
+            //pthread_mutex_unlock (&mutexQuery1);
         }
         wordcount ++;
     }
 
+    //write query's word weights to index
+    
+    pthread_mutex_lock (&mutexQuery1);   
+    for ( auto it = weight_map.begin(); it != weight_map.end(); ++it ) {
+        word = it->first;
+        InvertedIndex[word].vectorArray.at(column_id).weight = it->second;
+    }
+    pthread_mutex_unlock (&mutexQuery1);
+    
     
     // Computing cosine distance of the query and the relative documents
     // na apofeugoume apostaseis pou exoume idi ypologisei
@@ -556,7 +596,7 @@ void *call_from_thread_query(void *a) {
     int temp_wordcount = wordcount;
     iff >> word;
     vector<Numbers> univector;
-    
+    cout << "Thread : " << self << " Computing cosine distances! " << argz->doc << endl;
     while (InvertedIndex.find(word) == InvertedIndex.end() && while_count < temp_wordcount) {
         iff >> word;
         temp_wordcount --;
@@ -565,6 +605,7 @@ void *call_from_thread_query(void *a) {
     
     if(InvertedIndex.find(word) != InvertedIndex.end())
     {
+        
         univector = InvertedIndex[word].vectorArray;
 
         if(wordcount > 1)
@@ -575,23 +616,28 @@ void *call_from_thread_query(void *a) {
 
                 if (InvertedIndex.find(word2) != InvertedIndex.end()) {
 
-                    univector = compute_union(univector, InvertedIndex[word2].vectorArray);
+                    univector = compute_union(univector, InvertedIndex[word2].vectorArray); //suspect
 
                 }
             }
         }
+        
 
         int topK_counterino = 0;
         for (int i = 0; i < topk; i++) {
             topkArray[i].weight = 0;
             topkArray[i].exists = -1;
         }
+        
         for(int i = 0; i < documentsNumber; i++) // i variable is document id
         {
+            
             if(univector.at(i).exists != 0)
             {
                 if (topK_counterino == topk) {
+                    
                     float similarity = (float)cosDist(i, column_id);
+                    
                     if (similarity > topkArray[topk-1].weight) {
                         
                         topkArray[topk-1].exists = i;
@@ -619,6 +665,7 @@ void *call_from_thread_query(void *a) {
                 
             }
         }
+
         sort(topkArray, topkArray + topk,
                             [](Numbers const & a, Numbers const & b) -> bool
                             { return a.weight > b.weight; } 
@@ -672,7 +719,7 @@ void readFile(char *filename, int tn) {
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
         documentsNumber = docNumber;
-        count_docs = documentsNumber;
+        int count_docs = documentsNumber;
 	// do sth with number of docs
 
         int thread_counter = 0; // in which thread the string goes
@@ -747,7 +794,7 @@ void readQueryFile(char *filename, int tn) {
 	getline(file, str);
 	int docNumber = atoi(str.c_str());
         queriesNumber = docNumber;
-        count_queries = queriesNumber;
+        int count_queries = queriesNumber;
         
         for ( auto it = InvertedIndex.begin(); it != InvertedIndex.end(); ++it ) 
         {
